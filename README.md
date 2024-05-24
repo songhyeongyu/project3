@@ -84,8 +84,7 @@ To duplicate the parent's address space, set up the PTE in the child's page tabl
 - Submissions are limited to 30 times.
 
 ### Submission / Grading
-- Use [PAsubmit](https://sslab.ajou.ac.kr/pasubmit) for submission
-	- 600 pts + 10 pts
+- Total: 600 pts + 10 pts
 
 - Code: ***pa3.c*** (500 pts)
 	- Page allocation (50 pts)

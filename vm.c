@@ -157,11 +157,10 @@ static bool __access_memory(unsigned int vpn, unsigned int rw)
 	assert((rw & ACCESS_READ) ^ (rw & ACCESS_WRITE));
 
 	/**
-	 * We have NR_PTES_PER_PAGE entries in the outer table and so do for
-	 * inner page table. Thus each process can have up to NR_PTES_PER_PAGE^2
-	 * as its VPN
+	 * We have NR_PDES_PER_PAGE entries in the outer tables and
+	 * NR_PTES_PER_PAGE in inner tables.
 	 */
-	assert(vpn < NR_PTES_PER_PAGE * NR_PTES_PER_PAGE);
+	assert(vpn < NR_PDES_PER_PAGE * NR_PTES_PER_PAGE);
 
 	do {
 		bool from_tlb;
@@ -263,7 +262,7 @@ static void __show_pagetable(void)
 {
 	fprintf(stderr, "\n*** PID %u ***\n", current->pid);
 
-	for (int i = 0; i < NR_PTES_PER_PAGE; i++) {
+	for (int i = 0; i < NR_PDES_PER_PAGE; i++) {
 		struct pte_directory *pd = current->pagetable.pdes[i];
 
 		if (!pd) continue;

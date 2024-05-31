@@ -101,7 +101,8 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
  *   Return -1 if all page frames are allocated.
  */
 unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{
+{	
+	printf("hello world");
 	return -1;
 }
 

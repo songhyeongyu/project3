@@ -19,7 +19,6 @@
 #include "list_head.h"
 #include "vm.h"
 
-
 /**
  * Ready queue of the system
  */
@@ -99,29 +98,60 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
  *   Return -1 if all page frames are allocated.
  */
 unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{ // vpn은 내가 입력하는 숫자
+{   
+	
+	// vpn은 내가 입력하는 숫자
 	// pfn 2-levelv
 	//  어떤 곳에서도 할당되지 않은 pageframe을 가지는 process -> vpn이랑 mapping
-	struct pte *current_pte;
-	struct pd *current_pd;
-	struct pagetable *current_pagetable = ptbr;
-	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index
+	struct pte *current_pte; //page table entry
+	struct pd *current_pd;// page directory
+	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
+	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index ,an index into the page table = vpn
 	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
+	int cnt = 0;
 
-	//pd_index를 일단 먼저 alloc시켜준다. 1. pd_index가 비어있다면(?)
-	if(current_pagetable->pdes[pd_index] == NULL){
-		//16개의 pagetable entry를 malloc해줘야된다.
-		current_pagetable->pdes[pd_index] = malloc(sizeof(struct pte) * 1<<4); // pde 1개당 안에 총 16개의 pte생성
+	// pd_index를 일단 먼저 alloc시켜준다. 1. pd_index가 비어있다면(?)
+	if (current_pagetable->pdes[pd_index] == NULL)
+	{
+		// 16개의 pagetable entry를 malloc해줘야된다.
+		current_pagetable->pdes[pd_index] = malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE); // 1개당 총 16개의 pde생성
+
 	}
 
-	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; //현재 pte는 pde -> pte[pte_index에 정의]
 
-	
+	/*여기까지가 1번째줄 */
+	// page table enrty setting
+	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; // 현재 pte는 pde -> pte[pte_index에 정의]
+	// vaild bit도 바꿔줘야된다. 1 = vaild 0 = invalid
+	current_pte->valid = 1;
+	// rw도 바꿔준다. rw가 write -> write
+	if (rw == ACCESS_WRITE)
+	{
+		current_pte->rw = ACCESS_WRITE;
+	}
+	//rw가 read -> read
+	if (rw == ACCESS_READ)
+	{
+		current_pte->rw = ACCESS_READ;
+	}
+	/*여기까지가 2번째 문단.*/
 
+	// 가장 작은 pfn을 찾아야 된다. pfn은 아직 안건드렸다. 가장 작은 pfn을 찾는방법은?
+	// NR_PAGEFRAMES -> 이중에서 찾으면 된다 만약 이 값을 넘는다면? return -1?
+	//16개당 page128개의 frame?
+	for(int i = 0; i< NR_PAGEFRAMES; i++){
+		if(mapcounts[i] == '\0'){
+			current_pte->pfn = i;
+			cnt = i;
+			break;
+		}
+	}
 
-	
-	
-	return -1;
+	if(cnt >= NR_PAGEFRAMES){
+		return -1;
+	}
+
+	return cnt;
 }
 
 /**

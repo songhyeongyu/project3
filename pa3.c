@@ -108,7 +108,7 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
 	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index ,an index into the page table = vpn
 	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
-	int cnt = 0;
+	static int cnt = 0;
 
 	// pd_index를 일단 먼저 alloc시켜준다. 1. pd_index가 비어있다면(?)
 	if (current_pagetable->pdes[pd_index] == NULL)
@@ -118,22 +118,16 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 
 	}
 
-
 	/*여기까지가 1번째줄 */
 	// page table enrty setting
 	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; // 현재 pte는 pde -> pte[pte_index에 정의]
 	// vaild bit도 바꿔줘야된다. 1 = vaild 0 = invalid
 	current_pte->valid = 1;
+	current_pte->rw = rw;
 	// rw도 바꿔준다. rw가 write -> write
-	if (rw == ACCESS_WRITE)
-	{
-		current_pte->rw = ACCESS_WRITE;
-	}
-	//rw가 read -> read
-	if (rw == ACCESS_READ)
-	{
-		current_pte->rw = ACCESS_READ;
-	}
+	// rw -> 3 ,w -> 3 , r -> 1
+	
+	
 	/*여기까지가 2번째 문단.*/
 
 	// 가장 작은 pfn을 찾아야 된다. pfn은 아직 안건드렸다. 가장 작은 pfn을 찾는방법은?
@@ -142,7 +136,9 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	for(int i = 0; i< NR_PAGEFRAMES; i++){
 		if(mapcounts[i] == '\0'){
 			current_pte->pfn = i;
+			mapcounts[i]++;
 			cnt = i;
+
 			break;
 		}
 	}
@@ -150,7 +146,7 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	if(cnt >= NR_PAGEFRAMES){
 		return -1;
 	}
-
+	
 	return cnt;
 }
 

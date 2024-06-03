@@ -19,6 +19,7 @@
 #include "list_head.h"
 #include "vm.h"
 
+
 /**
  * Ready queue of the system
  */
@@ -32,20 +33,18 @@ extern struct process *current;
 /**
  * Page Table Base Register that MMU will walk through for address translation
  */
-extern struct pagetable *ptbr;
+extern struct pagetable *ptbr; // 밖에서 관리하는 놈
 
 /**
  * TLB of the system.
  */
 extern struct tlb_entry tlb[];
 
-
 /**
  * The number of mappings for each page frame. Can be used to determine how
  * many processes are using the page frames.
  */
 extern unsigned int mapcounts[];
-
 
 /**
  * lookup_tlb(@vpn, @rw, @pfn)
@@ -63,10 +62,10 @@ extern unsigned int mapcounts[];
  *   Return false otherwise
  */
 bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
-{
-	return false;
-}
+{ // vpn이 존재한다면 tlb에 -> vpn을 pfn으로 바꿔라?
 
+	return true;
+}
 
 /**
  * insert_tlb(@vpn, @rw, @pfn)
@@ -82,7 +81,6 @@ bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
 void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
 {
 }
-
 
 /**
  * alloc_page(@vpn, @rw)
@@ -101,11 +99,30 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
  *   Return -1 if all page frames are allocated.
  */
 unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{	
-	printf("hello world");
+{ // vpn은 내가 입력하는 숫자
+	// pfn 2-levelv
+	//  어떤 곳에서도 할당되지 않은 pageframe을 가지는 process -> vpn이랑 mapping
+	struct pte *current_pte;
+	struct pd *current_pd;
+	struct pagetable *current_pagetable = ptbr;
+	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index
+	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
+
+	//pd_index를 일단 먼저 alloc시켜준다. 1. pd_index가 비어있다면(?)
+	if(current_pagetable->pdes[pd_index] == NULL){
+		//16개의 pagetable entry를 malloc해줘야된다.
+		current_pagetable->pdes[pd_index] = malloc(sizeof(struct pte) * 1<<4); // pde 1개당 안에 총 16개의 pte생성
+	}
+
+	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; //현재 pte는 pde -> pte[pte_index에 정의]
+
+	
+
+
+	
+	
 	return -1;
 }
-
 
 /**
  * free_page(@vpn)
@@ -119,7 +136,6 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 void free_page(unsigned int vpn)
 {
 }
-
 
 /**
  * handle_page_fault()
@@ -142,7 +158,6 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 	return false;
 }
 
-
 /**
  * switch_process()
  *
@@ -156,12 +171,11 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  *   If there is no process with @pid in the @processes list, fork a process
  *   from the @current. This implies the forked child process should have
  *   the identical page table entry 'values' to its parent's (i.e., @current)
- *   page table. 
+ *   page table.
  *   To implement the copy-on-write feature, you should manipulate the writable
- *   bit in PTE and mapcounts for shared pages. You may use pte->private for 
+ *   bit in PTE and mapcounts for shared pages. You may use pte->private for
  *   storing some useful information :-)
  */
 void switch_process(unsigned int pid)
 {
 }
-

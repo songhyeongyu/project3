@@ -136,9 +136,11 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	for(int i = 0; i< NR_PAGEFRAMES; i++){
 		if(mapcounts[i] == '\0'){
 			current_pte->pfn = i;
+			// printf("mapcounts[i]1 :%d\n",mapcounts[i]);
 			mapcounts[i]++;
+			// printf("i : %d\n",i);
+			// printf("mapcounts[i]: %d\n",mapcounts[i]);
 			cnt = i;
-
 			break;
 		}
 	}
@@ -161,6 +163,21 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  */
 void free_page(unsigned int vpn)
 {
+	struct pte *current_pte; //page table entry
+	struct pd *current_pd;// page directory
+	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
+	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index ,an index into the page table = vpn
+	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
+	static int cnt = 0;
+
+	//반대로;
+	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; // 현재 pte
+	current_pte->pfn = 0;
+	current_pte->valid = 0;
+	current_pte->rw = ACCESS_NONE;
+	free(current_pagetable->pdes[pd_index]);
+
+	
 }
 
 /**
@@ -204,4 +221,5 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  */
 void switch_process(unsigned int pid)
 {
+	
 }

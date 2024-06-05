@@ -98,16 +98,16 @@ void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
  *   Return -1 if all page frames are allocated.
  */
 unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{   
-	
+{
+
 	// vpn은 내가 입력하는 숫자
 	// pfn 2-levelv
 	//  어떤 곳에서도 할당되지 않은 pageframe을 가지는 process -> vpn이랑 mapping
-	struct pte *current_pte; //page table entry
-	struct pd *current_pd;// page directory
+	struct pte *current_pte;					// page table entry
+	struct pd *current_pd;						// page directory
 	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
-	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index ,an index into the page table = vpn
-	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
+	int pd_index = vpn / NR_PTES_PER_PAGE;		// page를 모아놓은 것들 index ,an index into the page table = vpn
+	int pte_index = vpn % NR_PTES_PER_PAGE;		// page table entry index
 	static int cnt = 0;
 
 	// pd_index를 일단 먼저 alloc시켜준다. 1. pd_index가 비어있다면(?)
@@ -115,7 +115,6 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	{
 		// 16개의 pagetable entry를 malloc해줘야된다.
 		current_pagetable->pdes[pd_index] = malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE); // 1개당 총 16개의 pde생성
-
 	}
 
 	/*여기까지가 1번째줄 */
@@ -126,15 +125,16 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	current_pte->rw = rw;
 	// rw도 바꿔준다. rw가 write -> write
 	// rw -> 3 ,w -> 3 , r -> 1
-	
-	
+
 	/*여기까지가 2번째 문단.*/
 
 	// 가장 작은 pfn을 찾아야 된다. pfn은 아직 안건드렸다. 가장 작은 pfn을 찾는방법은?
 	// NR_PAGEFRAMES -> 이중에서 찾으면 된다 만약 이 값을 넘는다면? return -1?
-	//16개당 page128개의 frame?
-	for(int i = 0; i< NR_PAGEFRAMES; i++){
-		if(mapcounts[i] == '\0'){
+	// 16개당 page128개의 frame?
+	for (int i = 0; i < NR_PAGEFRAMES; i++)
+	{
+		if (mapcounts[i] == '\0')
+		{
 			current_pte->pfn = i;
 			// printf("mapcounts[i]1 :%d\n",mapcounts[i]);
 			mapcounts[i]++;
@@ -145,10 +145,11 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 		}
 	}
 
-	if(cnt >= NR_PAGEFRAMES){
+	if (cnt >= NR_PAGEFRAMES)
+	{
 		return -1;
 	}
-	
+
 	return cnt;
 }
 
@@ -163,21 +164,20 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  */
 void free_page(unsigned int vpn)
 {
-	struct pte *current_pte; //page table entry
-	struct pd *current_pd;// page directory
+	struct pte *current_pte;					// page table entry
+	struct pd *current_pd;						// page directory
 	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
-	int pd_index = vpn / NR_PTES_PER_PAGE;	// page를 모아놓은 것들 index ,an index into the page table = vpn
-	int pte_index = vpn % NR_PTES_PER_PAGE; // page table entry index
+	int pd_index = vpn / NR_PTES_PER_PAGE;		// page를 모아놓은 것들 index ,an index into the page table = vpn
+	int pte_index = vpn % NR_PTES_PER_PAGE;		// page table entry index
 	static int cnt = 0;
 
-	//반대로;
+	// 반대로;
 	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; // 현재 pte
-	current_pte->pfn = 0;
+	mapcounts[current_pte->pfn] -= 1;								   // map count를 0으로 조정해주고
+	current_pte->pfn = 0;											   // phsical frame number
 	current_pte->valid = 0;
 	current_pte->rw = ACCESS_NONE;
-	free(current_pagetable->pdes[pd_index]);
 
-	
 }
 
 /**
@@ -221,5 +221,52 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  */
 void switch_process(unsigned int pid)
 {
+	struct process *new = NULL;
+	struct process *tmp;
 	
+	// processes들의 모임을 만들어야 된다.
+	//  list head는 -> current(?) -> new로 process를 만들어 주고
+	// 
+	// switch의 명렁어가 오면  새로운 프로세스를 만들어야 된다 == fork()
+
+	// fork를 시캬줘야되는데 ptbr에 대해서 fork를 시켜준다.
+	// 1 . ptbr에 대해서 fork를 시켜주면 총 128개를 돌아야 된다.
+	//  나는 vpn값을 모른체로 시작한다.
+	// 흠 ...
+
+	//if there is a process with pid in @procces
+	if (!list_empty(&processes))
+	{	
+		list_for_each_entry(tmp, &processes, list){
+			if(pid == tmp->pid){
+				new = tmp;
+				break;
+			}
+		}
+	}
+	//if there is not process
+	
+	else{
+		// malloc 하고
+		new = malloc(sizeof(struct process));
+		new = current;
+		new->pid = pid;
+		new->pagetable = current->pagetable;
+		
+	}
+
+	//if there is not 
+	// current와 똑같이 만들어 준다.
+
+	// for(int i = 0; i<NR_PAGEFRAMES;i++){
+
+	// }
+
+
+
+
+
+	//new 라는 새로운 process가 생겼음
+
+
 }

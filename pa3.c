@@ -103,8 +103,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	// vpn은 내가 입력하는 숫자
 	// pfn 2-levelv
 	//  어떤 곳에서도 할당되지 않은 pageframe을 가지는 process -> vpn이랑 mapping
-	struct pte *current_pte;					// page table entry
-	struct pd *current_pd;						// page directory
+	struct pte *current_pte;					// page table entry -> 16개
+	struct pd *current_pd;						// page directory -> 4개
 	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
 	int pd_index = vpn / NR_PTES_PER_PAGE;		// page를 모아놓은 것들 index ,an index into the page table = vpn
 	int pte_index = vpn % NR_PTES_PER_PAGE;		// page table entry index
@@ -123,6 +123,7 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 	// vaild bit도 바꿔줘야된다. 1 = vaild 0 = invalid
 	current_pte->valid = 1;
 	current_pte->rw = rw;
+	current_pte->private = rw; // read-write fork를 위해서 생성 -> 애를 어떻게 넘겨주지?
 	// rw도 바꿔준다. rw가 write -> write
 	// rw -> 3 ,w -> 3 , r -> 1
 
@@ -130,8 +131,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
 
 	// 가장 작은 pfn을 찾아야 된다. pfn은 아직 안건드렸다. 가장 작은 pfn을 찾는방법은?
 	// NR_PAGEFRAMES -> 이중에서 찾으면 된다 만약 이 값을 넘는다면? return -1?
-	// 16개당 page128개의 frame?
-	for (int i = 0; i < NR_PAGEFRAMES; i++)
+	// 16개당 page128개의 frame? -> 실제 frame갯수가 128개 이것 보다 넘어가면 당연히 return -1;
+	for (int i = 0; i < NR_PAGEFRAMES; i++) // 실제 frame과 mapping시켜주는 과정.
 	{
 		if (mapcounts[i] == '\0')
 		{
@@ -177,7 +178,6 @@ void free_page(unsigned int vpn)
 	current_pte->pfn = 0;											   // phsical frame number
 	current_pte->valid = 0;
 	current_pte->rw = ACCESS_NONE;
-
 }
 
 /**
@@ -223,57 +223,85 @@ void switch_process(unsigned int pid)
 {
 	struct process *new = NULL;
 	struct process *tmp;
-	
-	// processes들의 모임을 만들어야 된다.
-	//  list head는 -> current(?) -> new로 process를 만들어 주고
-	// 
-	// switch의 명렁어가 오면  새로운 프로세스를 만들어야 된다 == fork()
+	struct pagetable *current_pagetable = ptbr;
+	struct pagetable *new_pagetable;
+	struct pte *new_pte;
+	struct pte *current_pte;
+	static int cnt = 0;
+	// pte사용은 어떻게?
+	//  processes들의 모임을 만들어야 된다.
+	//   list head는 -> current(?) -> new로 process를 만들어 주고
+	//
+	//  switch의 명렁어가 오면  새로운 프로세스를 만들어야 된다 == fork()
 
 	// fork를 시캬줘야되는데 ptbr에 대해서 fork를 시켜준다.
 	// 1 . ptbr에 대해서 fork를 시켜주면 총 128개를 돌아야 된다.
 	//  나는 vpn값을 모른체로 시작한다.
 	// 흠 ...
 
-	//if there is a process with pid in @procces
+	// if there is a process with pid in @procces
+	
 	if (!list_empty(&processes))
-	{	
-		list_for_each_entry(tmp, &processes, list){
-			if(pid == tmp->pid){
-				list_add(&current->list,&processes);
+	{
+		list_for_each_entry(tmp, &processes, list)
+		{
+			if (pid == tmp->pid)
+			{
+				
 				current = tmp;
 				break;
 			}
 		}
 	}
-	//if there is not process
-	// malloc 하고
-	else{
-		new = malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고 
-		new->pid = pid; // 일단 새로운 pid를 만들엇고 process에 넣어야지 
-		struct pagetable *new_pagetable = &new->pagetable; // pagetable 걸어놓고
+
+	// if there is not process
+	//  malloc 하고
+	else
+	{
 		
+		new = malloc(sizeof(struct process));			   // new process의 공간을 확보하고 새로 잡고
+		
+		for (int i = 0; i < NR_PDES_PER_PAGE; i++)
+		{
+			if (current_pagetable->pdes[i] == NULL)
+			{ // 현재 pagetable이 비어있다? 내가 필요로 하는 pagetable이 아님 new도 null로 초기화
+				new_pagetable->pdes[i] = NULL;
+				continue;
+			}
+			else
+			{
+				new_pagetable->pdes[i] =  malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE);
+			}
 
+			//new에다가 current를 다시 넣어야된다.
+			//new_pagetable의 공간은 잡았고 current는 이미 잡혀있다.
+			for(int j=0;j<NR_PTES_PER_PAGE;j++)
+			{	
+				
+				new_pagetable = current_pagetable;
 
+				
+			}
 
+		}
 	}
 
+	//mapcount는 밖에서 진행 안에서 진행하면 3중 for문사용
+	for(int i = 0;i<NR_PAGEFRAMES;i++){
+		if(mapcounts[i] == '\0'){
+			new_pte->pfn = i;
+			cnt = i;
+			mapcounts[i]++;
+		}
+	}
+	if(cnt > NR_PAGEFRAMES){
+		exit(EXIT_FAILURE);
+	}
 
-
-
-
-
-	//if there is not 
-	// current와 똑같이 만들어 준다.
-
-	// for(int i = 0; i<NR_PAGEFRAMES;i++){
-
-	// }
-
-
-
-
-
-	//new 라는 새로운 process가 생겼음
-
-
+	new->pid = pid;									   // 일단 새로운 pid를 만들엇고 process에 넣어야지
+	// current = new;
+	// list_replace(&current->list,&new->list);
+	// list_add_tail(&current->list, &processes);
+	
+	
 }

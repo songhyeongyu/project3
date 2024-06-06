@@ -239,21 +239,28 @@ void switch_process(unsigned int pid)
 	{	
 		list_for_each_entry(tmp, &processes, list){
 			if(pid == tmp->pid){
-				new = tmp;
+				list_add(&current->list,&processes);
+				current = tmp;
 				break;
 			}
 		}
 	}
 	//if there is not process
-	
+	// malloc 하고
 	else{
-		// malloc 하고
-		new = malloc(sizeof(struct process));
-		new = current;
-		new->pid = pid;
-		new->pagetable = current->pagetable;
+		new = malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고 
+		new->pid = pid; // 일단 새로운 pid를 만들엇고 process에 넣어야지 
+		struct pagetable *new_pagetable = &new->pagetable; // pagetable 걸어놓고
 		
+
+
+
 	}
+
+
+
+
+
 
 	//if there is not 
 	// current와 똑같이 만들어 준다.

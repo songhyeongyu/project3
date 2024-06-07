@@ -227,27 +227,22 @@ void switch_process(unsigned int pid)
 	struct pagetable *new_pagetable;
 	struct pte *new_pte;
 	struct pte *current_pte;
-	static int cnt = 0;
 	// pte사용은 어떻게?
 	//  processes들의 모임을 만들어야 된다.
 	//   list head는 -> current(?) -> new로 process를 만들어 주고
-	//
 	//  switch의 명렁어가 오면  새로운 프로세스를 만들어야 된다 == fork()
 
 	// fork를 시캬줘야되는데 ptbr에 대해서 fork를 시켜준다.
-	// 1 . ptbr에 대해서 fork를 시켜주면 총 128개를 돌아야 된다.
-	//  나는 vpn값을 모른체로 시작한다.
-	// 흠 ...
 
 	// if there is a process with pid in @procces
-	
+	// frame 128개 <->  pd -> pt
 	if (!list_empty(&processes))
 	{
 		list_for_each_entry(tmp, &processes, list)
 		{
 			if (pid == tmp->pid)
 			{
-				
+
 				current = tmp;
 				break;
 			}
@@ -258,50 +253,53 @@ void switch_process(unsigned int pid)
 	//  malloc 하고
 	else
 	{
-		
-		new = malloc(sizeof(struct process));			   // new process의 공간을 확보하고 새로 잡고
-		
+
+		new = (struct process*)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
+		new->pid = pid;
 		for (int i = 0; i < NR_PDES_PER_PAGE; i++)
 		{
-			if (current_pagetable->pdes[i] == NULL)
-			{ // 현재 pagetable이 비어있다? 내가 필요로 하는 pagetable이 아님 new도 null로 초기화
-				new_pagetable->pdes[i] = NULL;
+			if (current->pagetable.pdes[i] == NULL)
+			{
+
+				// 현재 pagetable이 비어있다? 내가 필요로 하는 pagetable이 아님 new도 null로 초기화
+				new->pagetable.pdes[i] = NULL;
 				continue;
 			}
 			else
 			{
-				new_pagetable->pdes[i] =  malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE);
+				new->pagetable.pdes[i] = malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE);
 			}
-
-			//new에다가 current를 다시 넣어야된다.
-			//new_pagetable의 공간은 잡았고 current는 이미 잡혀있다.
-			for(int j=0;j<NR_PTES_PER_PAGE;j++)
+			
+			for (int j = 0; j < NR_PTES_PER_PAGE; j++)
 			{	
-				
-				new_pagetable = current_pagetable;
 
-				
+
+				current_pte = &current_pagetable->pdes[i]->ptes[j];
+				new_pte = current_pte;
+				mapcounts[current_pte->pfn]++;
+				new_pte->valid = 1;
+				// printf("current private : %d\n",current_pte->private);
+				new->pagetable.pdes[i]->ptes[j] = *new_pte;
+
 			}
-
+			
+			
 		}
-	}
+		
+		current = new;
 
-	//mapcount는 밖에서 진행 안에서 진행하면 3중 for문사용
-	for(int i = 0;i<NR_PAGEFRAMES;i++){
-		if(mapcounts[i] == '\0'){
-			new_pte->pfn = i;
-			cnt = i;
-			mapcounts[i]++;
-		}
 	}
-	if(cnt > NR_PAGEFRAMES){
-		exit(EXIT_FAILURE);
-	}
+	
 
-	new->pid = pid;									   // 일단 새로운 pid를 만들엇고 process에 넣어야지
-	// current = new;
+	// mapcount는 밖에서 진행 안에서 진행하면 3중 for문사용
+	
 	// list_replace(&current->list,&new->list);
+	
 	// list_add_tail(&current->list, &processes);
+	// 일단 새로운 pid를 만들엇고 process에 넣어야지
+	// current = new;
+	// printf("8349525892789fdahhu4193901\n");
+	// ptbr = new_pagetable;
 	
-	
+
 }

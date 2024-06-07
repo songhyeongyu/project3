@@ -178,6 +178,10 @@ void free_page(unsigned int vpn)
 	current_pte->pfn = 0;											   // phsical frame number
 	current_pte->valid = 0;
 	current_pte->rw = ACCESS_NONE;
+
+
+
+	//free
 }
 
 /**
@@ -244,6 +248,8 @@ void switch_process(unsigned int pid)
 			{
 
 				current = tmp;
+				list_del_init(&tmp->list);				   // tmp를 process에서 없애고
+				list_add_tail(&current->list, &processes); // current를 proceess에 추가한다.
 				break;
 			}
 		}
@@ -253,15 +259,13 @@ void switch_process(unsigned int pid)
 	//  malloc 하고
 	else
 	{
-
-		new = (struct process*)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
+		new = (struct process *)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
 		new->pid = pid;
 		for (int i = 0; i < NR_PDES_PER_PAGE; i++)
 		{
 			if (current->pagetable.pdes[i] == NULL)
 			{
 
-				// 현재 pagetable이 비어있다? 내가 필요로 하는 pagetable이 아님 new도 null로 초기화
 				new->pagetable.pdes[i] = NULL;
 				continue;
 			}
@@ -269,37 +273,28 @@ void switch_process(unsigned int pid)
 			{
 				new->pagetable.pdes[i] = malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE);
 			}
-			
-			for (int j = 0; j < NR_PTES_PER_PAGE; j++)
-			{	
 
+			for (int j = 0; j < NR_PTES_PER_PAGE; j++)
+			{
 
 				current_pte = &current_pagetable->pdes[i]->ptes[j];
 				new_pte = current_pte;
+				// write가 되면 write가 되고 read, write가 되면 write가 안된다?
+				if (current_pte->valid == 1)
+				{
+					new_pte->valid = 1;
+					// 1. 현재 rw 가능 -> new r가능 w불가. -> 기본적으로 r모드 가능
+					// 2. 현재 r 가능 -> new r가능 w불가 -> r만 가능하게 ?
+					// 3. 갑자기 w접근 -> denied r만 가능하게 바꿈. -> r만가능하게?
+					
+					
+				}
 				mapcounts[current_pte->pfn]++;
-				new_pte->valid = 1;
-				// printf("current private : %d\n",current_pte->private);
 				new->pagetable.pdes[i]->ptes[j] = *new_pte;
-
 			}
-			
-			
+
+			current = new;
+			current_pagetable = new_pagetable;
 		}
-		
-		current = new;
-
 	}
-	
-
-	// mapcount는 밖에서 진행 안에서 진행하면 3중 for문사용
-	
-	// list_replace(&current->list,&new->list);
-	
-	// list_add_tail(&current->list, &processes);
-	// 일단 새로운 pid를 만들엇고 process에 넣어야지
-	// current = new;
-	// printf("8349525892789fdahhu4193901\n");
-	// ptbr = new_pagetable;
-	
-
 }

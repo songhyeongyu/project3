@@ -44,6 +44,13 @@ extern struct tlb_entry tlb[];
  * many processes are using the page frames.
  */
 extern unsigned int mapcounts[];
+//Switch_count
+static int a = 0;
+int switch_cnt()
+{
+	a++;
+	return a;
+}
 
 /**
  * lookup_tlb(@vpn, @rw, @pfn)
@@ -163,6 +170,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  *   Also, consider the case when a page is shared by two processes,
  *   and one process is about to free the page. Also, think about TLB as well ;-)
  */
+
+
 void free_page(unsigned int vpn)
 {
 	struct pte *current_pte;					// page table entry
@@ -170,18 +179,28 @@ void free_page(unsigned int vpn)
 	struct pagetable *current_pagetable = ptbr; // page table bases - resgisters
 	int pd_index = vpn / NR_PTES_PER_PAGE;		// page를 모아놓은 것들 index ,an index into the page table = vpn
 	int pte_index = vpn % NR_PTES_PER_PAGE;		// page table entry index
-	static int cnt = 0;
 
-	// 반대로;
+	// 반대로 이게 일단 하나만 pagetable을 해제한다.;
 	current_pte = &current_pagetable->pdes[pd_index]->ptes[pte_index]; // 현재 pte
 	mapcounts[current_pte->pfn] -= 1;								   // map count를 0으로 조정해주고
 	current_pte->pfn = 0;											   // phsical frame number
 	current_pte->valid = 0;
 	current_pte->rw = ACCESS_NONE;
+	free(&current_pagetable->pdes[pd_index]->ptes[pte_index]);
 
+	
+	// free 0를 하면 mapping된 모든 pfn을 해제해야 된다?
+	//'free' 명령은 VPN에 매핑된 페이지의 할당을 해제하는 것입니다.
+	// 해제된 VPN에 대한 후속 액세스가 MMU에 의해 거부되도록 페이지 테이블을 설정해야 합니다.  -> 0에 대해서 계속 거절?
+	// 쓰기 중 복사 기능을 사용하여 `free` 명령을 올바르게 처리하려면 대상 페이지 프레임이 2 이상으로 매핑되는 경우를 고려해야 합니다.
 
+	// free 0을 하면 pfn에 있는 모든 것들이 다 풀리는 것?
+	// if (switch_cnt() != 0)
+	// {
+	// 	printf("afjklahfkdhakfhajl;gskklgjskflgjlksfjglkfk;ldakh");
+	// }
 
-	//free
+	// free
 }
 
 /**
@@ -223,6 +242,7 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  *   bit in PTE and mapcounts for shared pages. You may use pte->private for
  *   storing some useful information :-)
  */
+
 void switch_process(unsigned int pid)
 {
 	struct process *new = NULL;
@@ -231,6 +251,7 @@ void switch_process(unsigned int pid)
 	struct pagetable *new_pagetable;
 	struct pte *new_pte;
 	struct pte *current_pte;
+	int cnt = 0;
 	// pte사용은 어떻게?
 	//  processes들의 모임을 만들어야 된다.
 	//   list head는 -> current(?) -> new로 process를 만들어 주고
@@ -240,6 +261,7 @@ void switch_process(unsigned int pid)
 
 	// if there is a process with pid in @procces
 	// frame 128개 <->  pd -> pt
+	
 	if (!list_empty(&processes))
 	{
 		list_for_each_entry(tmp, &processes, list)
@@ -261,40 +283,45 @@ void switch_process(unsigned int pid)
 	{
 		new = (struct process *)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
 		new->pid = pid;
-		for (int i = 0; i < NR_PDES_PER_PAGE; i++)
+		
+		for (int i = 0; i < NR_PTES_PER_PAGE; i++)
 		{
-			if (current->pagetable.pdes[i] == NULL)
+			if (current->pagetable.pdes[i] == NULL) //현재 current.pagetable pde[i]가 없으면 멈춘다. 왜냐하면 fork할게 없기 때문이다.
 			{
 
 				new->pagetable.pdes[i] = NULL;
-				continue;
+
+				break;
 			}
 			else
-			{
+			{	
 				new->pagetable.pdes[i] = malloc(sizeof(struct pagetable) * NR_PTES_PER_PAGE);
-			}
-
-			for (int j = 0; j < NR_PTES_PER_PAGE; j++)
-			{
-
-				current_pte = &current_pagetable->pdes[i]->ptes[j];
-				new_pte = current_pte;
-				// write가 되면 write가 되고 read, write가 되면 write가 안된다?
-				if (current_pte->valid == 1)
-				{
-					new_pte->valid = 1;
-					// 1. 현재 rw 가능 -> new r가능 w불가. -> 기본적으로 r모드 가능
-					// 2. 현재 r 가능 -> new r가능 w불가 -> r만 가능하게 ?
-					// 3. 갑자기 w접근 -> denied r만 가능하게 바꿈. -> r만가능하게?
+				for (int j = 0; j < NR_PTES_PER_PAGE; j++) //pte의 개수만큼 돌린다.
+				{	
 					
+					current_pte = &current_pagetable->pdes[i]->ptes[j];
+					new_pte = current_pte;
+					// // write가 되면 write가 되고 read, write가 되면 write가 안된다?
+					if (current_pte->valid == 1)
+					{
+						new_pte->valid = 1;
+						mapcounts[current_pte->pfn]++;
+					}
 					
+					//rw는 read만 가능 , write기능은 사용 안됨, read -> read
+					if(current_pte->rw == ACCESS_WRITE+0x01 || current_pte->rw == ACCESS_READ){
+						new_pte->rw =ACCESS_READ;
+					}
+
+					new->pagetable.pdes[i]->ptes[j] = *new_pte; // 새로운 page table의 entry;
 				}
-				mapcounts[current_pte->pfn]++;
-				new->pagetable.pdes[i]->ptes[j] = *new_pte;
 			}
-
-			current = new;
-			current_pagetable = new_pagetable;
+			
 		}
+		current = new;
+		current->pagetable = new->pagetable;
+		
 	}
+
+	// mapcount를 조정해야되는데 switch 1번될때마다 다 1씩 올려줘야 되는거 아닌가?
 }

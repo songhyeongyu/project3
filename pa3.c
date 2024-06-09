@@ -226,27 +226,31 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 	// 	return false;
 	// }
 	// pte가 invaild이면 ?
-	if (current_pte->valid == 0)
-	{
-		current_pte->valid = 1; // vaild로 바꾸고
-		if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
-		{
-			rw = ACCESS_WRITE + 0x01;
-		}
-		mapcounts[current_pte->pfn]--;
-		new_pfn = alloc_page(vpn, rw);
-
-		return true;
-	}
+	// if (current_pte->valid == 0)
+	// {
+	// 	current_pte->valid = 1; // vaild로 바꾸고
+	// 	if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
+	// 	{
+	// 		rw = ACCESS_WRITE + 0x01;
+	// 	}
+	// 	if (mapcounts[current_pte->pfn] > 1) // mapping cnt를 하나죽인다 write를 하면 자기 자신만의 새로운 것들이 생기기 대문에
+	// 	{
+	// 		mapcounts[current_pte->pfn]--;
+	// 		new_pfn = alloc_page(vpn, rw); // ->apgetable 업데이트
+	// 	}
+	// 	return true;
+	// }
 	// pte에서 wirte x rw는 가능할때 -> write가능하게해라
 	if (current_pte->rw != ACCESS_WRITE + 0x01 && current_pte->private == ACCESS_WRITE + 0x01)
 	{
 
-		if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
+		if (rw == ACCESS_WRITE || rw == ACCESS_WRITE + 0x01) // 0x02가 들어오면 rw로 바꿔주고
 		{
+			current_pte->rw = ACCESS_WRITE + 0x01;
+			current_pte->private = ACCESS_WRITE + 0x01;
 			rw = ACCESS_WRITE + 0x01;
 		}
-
+		
 		// 	// 나는 이제부터 write를 할거에요 부모님이 주신 write에다가 새로운 write를 할ㄱ거에요
 		// 	// // 나 새로운 pfn내놔!!!!!!!!!! -> 젤 작은 pfn 할당 새로 alloc하면 link가 이상해짐
 
@@ -307,18 +311,21 @@ void switch_process(unsigned int pid)
 
 	if (!list_empty(&processes))
 	{ // ->list가 비어있지 않는다면 2개 이상의 process가 존재할 때 만들어지지않음 goto문을 통해서 해결
-	
+
 		new = list_first_entry(&processes,struct process, list);
 		list_for_each_entry(tmp, &processes, list)
 		{
 			if (pid == tmp->pid)
 			{
 				// new가 안들어간다;; -> 해결.
-				list_add_tail(&current->list, &processes);
-				current = new;
+				new = tmp;
+				
+				current = tmp;
 				ptbr = &current->pagetable;
+				list_add_tail(&current->list, &processes);
 				list_del_init(&current->list);
 				flag_process = 1;
+				
 				break;
 			}
 			
@@ -326,8 +333,8 @@ void switch_process(unsigned int pid)
 		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
 		if(flag_process == 0){
 		goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
-
-	}
+	} // 18,19가 alloc되지 않음? cow-1
+		
 	}
 	
 
@@ -362,6 +369,7 @@ pick_next:
 					if (current_pte->rw == ACCESS_READ || current_pte->rw == ACCESS_WRITE + 0x01)
 					{
 						new_pte->rw = ACCESS_READ;
+						current_pte->rw = ACCESS_READ;
 					}
 
 					// rw는 read만 가능 , write기능은 사용 안됨, read -> read

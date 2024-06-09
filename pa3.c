@@ -68,10 +68,16 @@ int switch_cnt()
  *   Return false otherwise
  */
 bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
-{ // vpn이 존재한다면 tlb에 -> vpn을 pfn으로 바꿔라?
+{ 
+	
+
 
 	return true;
+		
 }
+
+
+
 
 /**
  * insert_tlb(@vpn, @rw, @pfn)
@@ -86,6 +92,19 @@ bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
  */
 void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
 {
+	//이미 tlb는 존재하니깐 까불지 말고 제데로 update만 시키켜라
+	//tlb는 굳이 pagetable까지 안가고 그냥 tlb를 통해서 해결하는 것이다.
+	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+		struct tlb_entry *t = tlb + i; //tlb[i]
+
+		if (!t->valid){
+			t->valid = 1;
+			t->pfn = pfn;
+			t->vpn = vpn;
+			t->rw = rw;
+		}
+	}
+
 }
 
 /**
@@ -189,8 +208,20 @@ void free_page(unsigned int vpn)
 	//'free' 명령은 VPN에 매핑된 페이지의 할당을 해제하는 것입니다.
 	// 해제된 VPN에 대한 후속 액세스가 MMU에 의해 거부되도록 페이지 테이블을 설정해야 합니다.  -> 0에 대해서 계속 거절?
 	// 쓰기 중 복사 기능을 사용하여 `free` 명령을 올바르게 처리하려면 대상 페이지 프레임이 2 이상으로 매핑되는 경우를 고려해야 합니다.
-
+	
 	// fork하고 나서 문제가 된다. -> process 1이 새로 쓰고 싶으면
+
+
+	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+		struct tlb_entry *t = tlb + i;
+
+		if (t->vpn == vpn){
+			t->pfn = 0;
+			t->vpn = 0;
+			t->rw = 0;
+			t->valid = 0;
+		}
+	}
 }
 
 /**
@@ -221,27 +252,19 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 	// if(!current_pd) return true; //fault 발생 0
 	// if(current_pte->valid == 0) return true; //fault발생 1
 	// pd가 invaild면....
-	// if (current_pte_directory == NULL)
-	// {
-	// 	return false;
-	// }
+	if (current_pte_directory == NULL)
+	{
+		return false;
+	}
 	// pte가 invaild이면 ?
-	// if (current_pte->valid == 0)
-	// {
-	// 	current_pte->valid = 1; // vaild로 바꾸고
-	// 	if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
-	// 	{
-	// 		rw = ACCESS_WRITE + 0x01;
-	// 	}
-	// 	if (mapcounts[current_pte->pfn] > 1) // mapping cnt를 하나죽인다 write를 하면 자기 자신만의 새로운 것들이 생기기 대문에
-	// 	{
-	// 		mapcounts[current_pte->pfn]--;
-	// 		new_pfn = alloc_page(vpn, rw); // ->apgetable 업데이트
-	// 	}
-	// 	return true;
-	// }
+	if (current_pte->valid == 0)
+	{
+		current_pte->valid = 1; // vaild로 바꾸고
+		
+		return true;
+	}
 	// pte에서 wirte x rw는 가능할때 -> write가능하게해라
-	if (current_pte->rw != ACCESS_WRITE + 0x01 && current_pte->private == ACCESS_WRITE + 0x01)
+	if (current_pte->rw != current_pte->private)
 	{
 
 		if (rw == ACCESS_WRITE || rw == ACCESS_WRITE + 0x01) // 0x02가 들어오면 rw로 바꿔주고
@@ -307,8 +330,16 @@ void switch_process(unsigned int pid)
 	// if there is a process with pid in @procces
 	// frame 128개 <->  pd -> pt
 	// switch 2일 때 안된다. -> list
+	
+	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+		struct tlb_entry *t = tlb + i;
 
-
+		t->valid = 0;
+		t->pfn = 0;
+		t->rw = 0;
+		t->vpn = 0;
+		
+	}
 	if (!list_empty(&processes))
 	{ // ->list가 비어있지 않는다면 2개 이상의 process가 존재할 때 만들어지지않음 goto문을 통해서 해결
 
@@ -319,7 +350,6 @@ void switch_process(unsigned int pid)
 			{
 				// new가 안들어간다;; -> 해결.
 				new = tmp;
-				
 				current = tmp;
 				ptbr = &current->pagetable;
 				list_add_tail(&current->list, &processes);
@@ -330,10 +360,10 @@ void switch_process(unsigned int pid)
 			}
 			
 		}
-		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
+		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동 
 		if(flag_process == 0){
 		goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
-	} // 18,19가 alloc되지 않음? cow-1
+	} // 18,19가 alloc되지 않음? cow-1 -> handle에서 문제
 		
 	}
 	
@@ -382,6 +412,7 @@ pick_next:
 		current = new;
 		ptbr = &new->pagetable;
 	}
-
+	//swtich가 되면 이전에 있었떤 tlb들을 다 끊어야 되는데 -> Note that TLB should be flushed during the context switch.
+	
 	// mapcount를 조정해야되는데 switch 1번될때마다 다 1씩 올려줘야 되는거 아닌가?
 }

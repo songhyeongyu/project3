@@ -213,42 +213,52 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 {
 	struct pte *current_pte; // page table entry
 	struct pte_directory *current_pte_directory;
-	int pd_index = vpn / NR_PTES_PER_PAGE;		// page를 모아놓은 것들 index ,an index into the page table = vpn
+	int pd_index = vpn / NR_PTES_PER_PAGE; // page를 모아놓은 것들 index ,an index into the page table = vpn
 	int pte_index = vpn % NR_PTES_PER_PAGE;
 	unsigned int new_pfn = 0;
-	current_pte_directory = current->pagetable.pdes[pd_index]; //현재 process의 pagetqble의 page directory
+	current_pte_directory = current->pagetable.pdes[pd_index]; // 현재 process의 pagetqble의 page directory
 	current_pte = &current->pagetable.pdes[pd_index]->ptes[pte_index];
 	// if(!current_pd) return true; //fault 발생 0
 	// if(current_pte->valid == 0) return true; //fault발생 1
-	//pd가 invaild면....
-	if (current_pte_directory == NULL)
-	{	
-		return false;
-	}
-	//pte가 invaild이면 ?
+	// pd가 invaild면....
+	// if (current_pte_directory == NULL)
+	// {
+	// 	return false;
+	// }
+	// pte가 invaild이면 ?
 	if (current_pte->valid == 0)
-	{	
-		current_pte->valid = 1; //vaild로 바꾸고
+	{
+		current_pte->valid = 1; // vaild로 바꾸고
+		if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
+		{
+			rw = ACCESS_WRITE + 0x01;
+		}
 		mapcounts[current_pte->pfn]--;
+		new_pfn = alloc_page(vpn, rw);
+
 		return true;
 	}
 	// pte에서 wirte x rw는 가능할때 -> write가능하게해라
-	if (current_pte->rw != current_pte->private)
-	{	
-		if(rw == ACCESS_WRITE){
-			rw = ACCESS_WRITE + 0x01;
-		}		
+	if (current_pte->rw != ACCESS_WRITE + 0x01 && current_pte->private == ACCESS_WRITE + 0x01)
+	{
 
-		// 나는 이제부터 write를 할거에요 부모님이 주신 write에다가 새로운 write를 할ㄱ거에요
-		// // 나 새로운 pfn내놔!!!!!!!!!! -> 젤 작은 pfn 할당 새로 alloc하면 link가 이상해짐
-		
-		mapcounts[current_pte->pfn]--;
-		new_pfn = alloc_page(vpn,rw);
+		if (rw == ACCESS_WRITE) // 0x02가 들어오면 rw로 바꿔주고
+		{
+			rw = ACCESS_WRITE + 0x01;
+		}
+
+		// 	// 나는 이제부터 write를 할거에요 부모님이 주신 write에다가 새로운 write를 할ㄱ거에요
+		// 	// // 나 새로운 pfn내놔!!!!!!!!!! -> 젤 작은 pfn 할당 새로 alloc하면 link가 이상해짐
+
+		if (mapcounts[current_pte->pfn] > 1) // mapping cnt를 하나죽인다 write를 하면 자기 자신만의 새로운 것들이 생기기 대문에
+		{
+			mapcounts[current_pte->pfn]--;
+			new_pfn = alloc_page(vpn, rw); // ->apgetable 업데이트
+		}
 
 		return true;
 	}
 
-	
 	// pte가 쓸 수 없는데 쓰려고 할 때 -> fault를 내라
 
 	return false;
@@ -276,12 +286,13 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 void switch_process(unsigned int pid)
 {
 	struct process *new = NULL;
-	struct process *tmp;
+	struct process *tmp = NULL;
 	struct pagetable *current_pagetable = ptbr;
 	struct pagetable *new_pagetable;
 	struct pte *new_pte;
 	struct pte *current_pte;
 	int cnt = 0;
+	int flag_process = 0;
 	// pte사용은 어떻게?
 	//  processes들의 모임을 만들어야 된다.
 	//   list head는 -> current(?) -> new로 process를 만들어 주고
@@ -291,31 +302,45 @@ void switch_process(unsigned int pid)
 
 	// if there is a process with pid in @procces
 	// frame 128개 <->  pd -> pt
+	// switch 2일 때 안된다. -> list
 
-	list_for_each_entry(tmp, &processes, list)
-	{
-		if (pid == tmp->pid)
+
+	if (!list_empty(&processes))
+	{ // ->list가 비어있지 않는다면 2개 이상의 process가 존재할 때 만들어지지않음 goto문을 통해서 해결
+	
+		new = list_first_entry(&processes,struct process, list);
+		list_for_each_entry(tmp, &processes, list)
 		{
-
-			current = tmp;
-			ptbr = &tmp->pagetable;
-			list_add_tail(&current->list, &processes);
-			list_del_init(&tmp->list);
-			break;
+			if (pid == tmp->pid)
+			{
+				// new가 안들어간다;; -> 해결.
+				list_add_tail(&current->list, &processes);
+				current = new;
+				ptbr = &current->pagetable;
+				list_del_init(&current->list);
+				flag_process = 1;
+				break;
+			}
+			
 		}
+		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
+		if(flag_process == 0){
+		goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
+
 	}
+	}
+	
 
-	// if there is not process
-	//  malloc 하고 //listhead 는 0
-	if (new == NULL) // 1개이상이 processes에 존재하면 오류가 난다.
+
+	else
 	{
+pick_next:
 		new = (struct process *)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
-
+		new->pid = pid;
 		for (int i = 0; i < NR_PTES_PER_PAGE; i++)
 		{
 			if (current->pagetable.pdes[i] == NULL) // 현재 current.pagetable pde[i]가 없으면 멈춘다. 왜냐하면 fork할게 없기 때문이다.
 			{
-
 				new->pagetable.pdes[i] = NULL;
 
 				break;
@@ -332,9 +357,10 @@ void switch_process(unsigned int pid)
 					if (current_pte->valid == 1)
 					{
 						new_pte->valid = 1;
-						mapcounts[current_pte->pfn]++;
+						mapcounts[new_pte->pfn]++;
 					}
-					if(current_pte->rw == ACCESS_READ || current_pte->rw == ACCESS_WRITE + 0x01){
+					if (current_pte->rw == ACCESS_READ || current_pte->rw == ACCESS_WRITE + 0x01)
+					{
 						new_pte->rw = ACCESS_READ;
 					}
 
@@ -344,10 +370,9 @@ void switch_process(unsigned int pid)
 				}
 			}
 		}
-		list_add_tail(&new->list, &processes);
+		list_add_tail(&current->list, &processes); // 현재 processes에 들어 있는 process를 넣어야된다.
 		current = new;
 		ptbr = &new->pagetable;
-		current->pid = pid;
 	}
 
 	// mapcount를 조정해야되는데 switch 1번될때마다 다 1씩 올려줘야 되는거 아닌가?

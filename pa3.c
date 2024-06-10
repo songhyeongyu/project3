@@ -68,16 +68,34 @@ int switch_cnt()
  *   Return false otherwise
  */
 bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
-{ 
+{
+	for (int i = 0; i < NR_TLB_ENTRIES; i++)
+	{
+		struct tlb_entry *t = tlb + i; // tlb_entrt의 i번째
+
+		if (!t->valid || t->vpn != vpn) //1. cold miss 2. 히트 or miss
+		{	
+			
+			continue;
+		}
+
+		else // hit가 되면 정보를 바꾼다 x -> o 로 
+		{	
+
+			if (rw == ACCESS_WRITE)
+			{
+				rw += 0x01;
+			}
+			t->rw = rw;
+			*pfn = t->pfn;
+			return true;
+		}
+
+	}
 	
 
-
-	return true;
-		
+	return false;
 }
-
-
-
 
 /**
  * insert_tlb(@vpn, @rw, @pfn)
@@ -92,19 +110,21 @@ bool lookup_tlb(unsigned int vpn, unsigned int rw, unsigned int *pfn)
  */
 void insert_tlb(unsigned int vpn, unsigned int rw, unsigned int pfn)
 {
-	//이미 tlb는 존재하니깐 까불지 말고 제데로 update만 시키켜라
-	//tlb는 굳이 pagetable까지 안가고 그냥 tlb를 통해서 해결하는 것이다.
-	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
-		struct tlb_entry *t = tlb + i; //tlb[i]
+	// 이미 tlb는 존재하니깐 까불지 말고 제데로 update만 시키켜라
+	// tlb는 굳이 pagetable까지 안가고 그냥 tlb를 통해서 해결하는 것이다.
+	for (int i = 0; i < NR_TLB_ENTRIES; i++)
+	{
+		struct tlb_entry *t = tlb + i; // tlb[i]
 
-		if (!t->valid){
+		if (t->valid == 0)// tlb공간에 사용되는 vpn, pfn을 넣어 놓는다.(hit,miss날지는 모름)
+		{
 			t->valid = 1;
-			t->pfn = pfn;
 			t->vpn = vpn;
-			t->rw = rw;
+			t->pfn = pfn;
+			t->rw = rw; //이놈을 안썻다
+			break;
 		}
 	}
-
 }
 
 /**
@@ -208,18 +228,20 @@ void free_page(unsigned int vpn)
 	//'free' 명령은 VPN에 매핑된 페이지의 할당을 해제하는 것입니다.
 	// 해제된 VPN에 대한 후속 액세스가 MMU에 의해 거부되도록 페이지 테이블을 설정해야 합니다.  -> 0에 대해서 계속 거절?
 	// 쓰기 중 복사 기능을 사용하여 `free` 명령을 올바르게 처리하려면 대상 페이지 프레임이 2 이상으로 매핑되는 경우를 고려해야 합니다.
-	
+
 	// fork하고 나서 문제가 된다. -> process 1이 새로 쓰고 싶으면
 
-
-	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
+	for (int i = 0; i < NR_TLB_ENTRIES; i++) //해제를 해준다.
+	{
 		struct tlb_entry *t = tlb + i;
 
-		if (t->vpn == vpn){
+		if (t->vpn == vpn)
+		{
+			t->valid = 0;
 			t->pfn = 0;
 			t->vpn = 0;
 			t->rw = 0;
-			t->valid = 0;
+			break;
 		}
 	}
 }
@@ -260,7 +282,6 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 	if (current_pte->valid == 0)
 	{
 		current_pte->valid = 1; // vaild로 바꾸고
-		
 		return true;
 	}
 	// pte에서 wirte x rw는 가능할때 -> write가능하게해라
@@ -273,7 +294,7 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
 			current_pte->private = ACCESS_WRITE + 0x01;
 			rw = ACCESS_WRITE + 0x01;
 		}
-		
+
 		// 	// 나는 이제부터 write를 할거에요 부모님이 주신 write에다가 새로운 write를 할ㄱ거에요
 		// 	// // 나 새로운 pfn내놔!!!!!!!!!! -> 젤 작은 pfn 할당 새로 alloc하면 link가 이상해짐
 
@@ -330,20 +351,20 @@ void switch_process(unsigned int pid)
 	// if there is a process with pid in @procces
 	// frame 128개 <->  pd -> pt
 	// switch 2일 때 안된다. -> list
-	
-	for (int i = 0; i < NR_TLB_ENTRIES; i++) {
-		struct tlb_entry *t = tlb + i;
 
+	// Note that TLB should be flushed during the context switch.
+	for (int i = 0; i < NR_TLB_ENTRIES; i++) // flush를 해준다.
+	{
+		struct tlb_entry *t = tlb + i;
 		t->valid = 0;
-		t->pfn = 0;
 		t->rw = 0;
+		t->pfn = 0;
 		t->vpn = 0;
-		
 	}
 	if (!list_empty(&processes))
 	{ // ->list가 비어있지 않는다면 2개 이상의 process가 존재할 때 만들어지지않음 goto문을 통해서 해결
 
-		new = list_first_entry(&processes,struct process, list);
+		new = list_first_entry(&processes, struct process, list);
 		list_for_each_entry(tmp, &processes, list)
 		{
 			if (pid == tmp->pid)
@@ -355,23 +376,19 @@ void switch_process(unsigned int pid)
 				list_add_tail(&current->list, &processes);
 				list_del_init(&current->list);
 				flag_process = 1;
-				
 				break;
 			}
-			
 		}
-		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동 
-		if(flag_process == 0){
-		goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
-	} // 18,19가 alloc되지 않음? cow-1 -> handle에서 문제
-		
+		// goto pick_next; //만약 break가 걸리지 않는다면 goto문으로 이동
+		if (flag_process == 0)
+		{
+			goto pick_next; // 만약 break가 걸리지 않는다면 goto문으로 이동
+		} // 18,19가 alloc되지 않음? cow-1 -> handle에서 문제
 	}
-	
-
 
 	else
 	{
-pick_next:
+	pick_next:
 		new = (struct process *)malloc(sizeof(struct process)); // new process의 공간을 확보하고 새로 잡고
 		new->pid = pid;
 		for (int i = 0; i < NR_PTES_PER_PAGE; i++)
@@ -412,7 +429,7 @@ pick_next:
 		current = new;
 		ptbr = &new->pagetable;
 	}
-	//swtich가 되면 이전에 있었떤 tlb들을 다 끊어야 되는데 -> Note that TLB should be flushed during the context switch.
-	
+	// swtich가 되면 이전에 있었떤 tlb들을 다 끊어야 되는데 -> Note that TLB should be flushed during the context switch.
+
 	// mapcount를 조정해야되는데 switch 1번될때마다 다 1씩 올려줘야 되는거 아닌가?
 }
